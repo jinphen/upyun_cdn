@@ -1,0 +1,32 @@
+{
+  "name": "upyun_cdn",
+  "version": "0.0.1",
+  "description": "upyun cdn upload",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jinphen/upyun_cdn.git"
+  },
+  "keywords": [
+    "upyun",
+    "cdn",
+    "upload"
+  ],
+  "author": "gxuezhao@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jinphen/upyun_cdn/issues"
+  },
+  "homepage": "https://github.com/jinphen/upyun_cdn#readme",
+  "dependencies": {
+    "gulp": "^3.9.0",
+    "gulp-util": "^3.0.7",
+    "mime": "^1.3.4",
+    "q": "^1.4.1",
+    "through2": "^2.0.0",
+    "upyun": "^1.1.3"
+  }
+}
