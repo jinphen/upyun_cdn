@@ -1,2 +1,2 @@
 # upyun_cdn
-又拍去cdn上传
+又拍云cdn上传
