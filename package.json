@@ -1,6 +1,6 @@
 {
   "name": "upyun_cdn",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "upyun cdn upload",
   "main": "index.js",
   "scripts": {
@@ -22,11 +22,11 @@
   },
   "homepage": "https://github.com/jinphen/upyun_cdn#readme",
   "dependencies": {
-    "gulp": "^3.9.0",
     "gulp-util": "^3.0.7",
     "mime": "^1.3.4",
     "q": "^1.4.1",
     "through2": "^2.0.0",
-    "upyun": "^1.1.3"
+    "upyun": "^1.1.3",
+    "vinyl-fs": "^2.2.1"
   }
 }

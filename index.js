@@ -2,7 +2,7 @@ var Upyun = require('upyun');
 var mime = require('mime');
 var path = require('path');
 var through = require('through2');
-var gulp = require('gulp');
+var fs = require('vinyl-fs');
 var gutil = require('gulp-util');
 var colors = gutil.colors;
 var Q = require('q');
@@ -13,6 +13,7 @@ var modifyFilesNum = 0; // 已上传，但本地修改数量
 var errorCheckNum = 0; // 错误处理数量
 
 var upyun;
+var highWaterMark = 40960;
 var logCheckDefer = Q.defer();
 var uploadDefer = Q.defer();
 var logUploadFailDefer = Q.defer();
@@ -23,7 +24,7 @@ var upyunErrorMsgMap = {
 
 function upyun_cdn(upload, auth) {
     upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
-    return gulp.src(upload.src, {read: false})
+    return fs.src(upload.src, {read: false})
         .pipe(init(upload)) // 初始化属性值
 
         .pipe(checkRemoteFile()) // 是否存在文件
@@ -48,7 +49,7 @@ function upyun_cdn(upload, auth) {
 }
 
 function init(upload) {
-    return through.obj(function(file, encoding, next) {
+    return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         var cdnpath = util.getCdnPath(file, upload);
 
         file.checkTryCount = 0;
@@ -63,7 +64,7 @@ function init(upload) {
 }
 
 function checkRemoteFile() {
-    return through.obj(function(file, encoding, next) {
+    return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needCheck) {
             upyun.existsFile(file.cdnPath, function(error, result) {
                 if (error) {
@@ -113,7 +114,7 @@ function checkRemoteFile() {
 }
 
 function logCheckFailed() {
-    return through.obj(function(file, encoding, next) {
+    return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needCheck) {
             util.logCheckFail(file);
         }
@@ -122,7 +123,7 @@ function logCheckFailed() {
 }
 
 function uploadFile() {
-    return through.obj(function(file, encoding, next) {
+    return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needUpload) {
             upyun.uploadFile(file.cdnPath,
                              file.path,
@@ -158,7 +159,7 @@ function uploadFile() {
 }
 
 function logUploadFail() {
-    return through.obj(function(file, encoding, next) {
+    return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needUpload) {
             util.logUploadFail(file);
         }
@@ -169,7 +170,7 @@ function logUploadFail() {
 var util = {
     getCdnPath: function(file, upload) {
         var cdnpath = path.relative(file.base, file.path);
-        cdnpath = path.join(upload.dest, cdnpath);
+        cdnpath = path.join('/', upload.dest, cdnpath);
         return cdnpath;
     },
 
