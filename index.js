@@ -23,7 +23,7 @@ var upyunErrorMsgMap = {
 
 function upyun_cdn(upload, auth) {
     upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
-    gulp.src(upload.src, {read: false})
+    return gulp.src(upload.src, {read: false})
         .pipe(init(upload)) // 初始化属性值
 
         .pipe(checkRemoteFile()) // 是否存在文件
