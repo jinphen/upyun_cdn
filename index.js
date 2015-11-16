@@ -22,7 +22,9 @@ var upyunErrorMsgMap = {
     '40100006': '用户不存在！'
 };
 
-function upyun_cdn(upload, auth) {
+var errors = [];
+
+function upyun_cdn(upload, auth, callback) {
     upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
     return fs.src(upload.src, {read: false})
         .pipe(init(upload)) // 初始化属性值
@@ -45,7 +47,12 @@ function upyun_cdn(upload, auth) {
         .on('end', function() {
             logUploadFailDefer.resolve();
         })
-        .pipe(logUploadFail());
+        .pipe(logUploadFail())
+        on('end', function() {
+            if (errors.length) {
+                callback(errors.join(','));
+            }
+        });
 }
 
 function init(upload) {
@@ -188,13 +195,14 @@ var util = {
                       colors.red(file.path), '→', colors.red(file.cdnPath), '\n',
                       colors.red('失败原因：'), colors.red(file.checkFailMsg), '\n',
                       colors.red('返回信息：'), colors.red(file.checkFailRes));
+            errors.push(file.checkFailRes);
         });
     },
 
     logUpload: function(file) {
         uploadDefer.promise.then(function() {
             if (file.uploadSuccess) {
-                gutil.log('上传完毕', colors.green(file.path), '→', colors.green(file.cdnPath));
+                gutil.log('上传又拍完毕', colors.green(file.path), '→', colors.green(file.cdnPath));
             } else {
                 // gutil.log(colors.red('上传失败'), colors.red(file.path), '→', colors.red(file.cdnPath));
                 // gutil.log(colors.red('失败原因：'), colors.red(file.uploadFailMsg),
@@ -205,10 +213,11 @@ var util = {
 
     logUploadFail: function(file) {
         logUploadFailDefer.promise.then(function() {
-            gutil.log(colors.red('上传失败'),
+            gutil.log(colors.red('上传又拍失败'),
                       colors.red(file.path), '→', colors.red(file.cdnPath), '\n',
                       colors.red('失败原因：'), colors.red(file.uploadFailMsg), '\n',
                       colors.red('返回信息：'), colors.red(file.uploadFailRes));
+            errors.push(file.checkFailRes);
         });
     }
 };
