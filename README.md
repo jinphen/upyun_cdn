@@ -3,7 +3,7 @@
 
 ### 使用方法
 
-upyun_cdn(options, auth)
+upyun_cdn(options, auth, [callback])
 
 options:
 * `src` glob pattern
@@ -14,6 +14,9 @@ auth:
 * `operator`
 * `password`
 
+callback:
+* 参数为error
+
 ### 示例
 ```js
 upyun_cdn({
@@ -23,5 +26,9 @@ upyun_cdn({
     bucket: 'upyun-text',
     operator: 'test',
     password: 'test'
+}, function(err) {
+    if (err) {
+        console.error(err);
+    }
 });
 ```

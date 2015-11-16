@@ -7,13 +7,14 @@ var gutil = require('gulp-util');
 var colors = gutil.colors;
 var Q = require('q');
 
+function upyun_cdn(upload, auth, callback) {
+
 var needUploadNum = 0; // 需要上传数量
 var alreadyUploadNum = 0; // 已上传数量
 var modifyFilesNum = 0; // 已上传，但本地修改数量
 var errorCheckNum = 0; // 错误处理数量
 
-var upyun;
-var highWaterMark = 40960;
+var highWaterMark = 2 * 1024 * 1024 * 1024; // 2G
 var logCheckDefer = Q.defer();
 var uploadDefer = Q.defer();
 var logUploadFailDefer = Q.defer();
@@ -22,38 +23,8 @@ var upyunErrorMsgMap = {
     '40100006': '用户不存在！'
 };
 
+var upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
 var errors = [];
-
-function upyun_cdn(upload, auth, callback) {
-    upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
-    return fs.src(upload.src, {read: false})
-        .pipe(init(upload)) // 初始化属性值
-
-        .pipe(checkRemoteFile()) // 是否存在文件
-        .pipe(checkRemoteFile()) // retry
-        .pipe(checkRemoteFile()) // retry
-        .on('end', function() {
-            console.log();
-            logCheckDefer.resolve();
-        })
-        .pipe(logCheckFailed())
-        .on('end', function() {
-            uploadDefer.resolve();
-        })
-
-        .pipe(uploadFile()) // 上传文件
-        .pipe(uploadFile()) // retry
-        .pipe(uploadFile()) // retry
-        .on('end', function() {
-            logUploadFailDefer.resolve();
-        })
-        .pipe(logUploadFail())
-        on('end', function() {
-            if (errors.length) {
-                callback(errors.join(','));
-            }
-        });
-}
 
 function init(upload) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
@@ -62,7 +33,7 @@ function init(upload) {
         file.checkTryCount = 0;
         file.uploadTryCount = 0;
         file.cdnPath = cdnpath;
-        file.needCheck = true;
+        file.needCheck = file.stat.isFile();
         file.needUpload = false;
         file.needCompare = false;
 
@@ -112,7 +83,7 @@ function checkRemoteFile() {
                 }
 
                 next(null, file);
-                util.logCheck();
+                util.logCheck(alreadyUploadNum + modifyFilesNum, needUploadNum, errorCheckNum);
             });
         } else {
             next(null, file);
@@ -181,7 +152,7 @@ var util = {
         return cdnpath;
     },
 
-    logCheck: function() {
+    logCheck: function(alreadyUploadNum, needUploadNum, errorCheckNum) {
         process.stdout.clearLine();
         process.stdout.cursorTo(0);
         process.stdout.write('相同: ' + alreadyUploadNum + '\t\t' +
@@ -221,5 +192,34 @@ var util = {
         });
     }
 };
+
+return fs.src(upload.src, {read: false})
+    .pipe(init(upload)) // 初始化属性值
+
+    .pipe(checkRemoteFile()) // 是否存在文件
+    .pipe(checkRemoteFile()) // retry
+    .pipe(checkRemoteFile()) // retry
+    .on('end', function() {
+        console.log();
+        logCheckDefer.resolve();
+    })
+    .pipe(logCheckFailed())
+    .on('end', function() {
+        uploadDefer.resolve();
+    })
+
+    .pipe(uploadFile()) // 上传文件
+    .pipe(uploadFile()) // retry
+    .pipe(uploadFile()) // retry
+    .on('end', function() {
+        logUploadFailDefer.resolve();
+    })
+    .pipe(logUploadFail())
+    .on('end', function() {
+        if (errors.length) {
+            callback(errors.join(','));
+        }
+    });
+}
 
 module.exports = upyun_cdn;
