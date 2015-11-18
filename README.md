@@ -15,7 +15,8 @@ auth:
 * `password`
 
 callback:
-* 参数为error
+* error
+* result
 
 ### 示例
 ```js
@@ -26,7 +27,7 @@ upyun_cdn({
     bucket: 'upyun-text',
     operator: 'test',
     password: 'test'
-}, function(err) {
+}, function(err, result) {
     if (err) {
         console.error(err);
     }

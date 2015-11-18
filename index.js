@@ -1,30 +1,59 @@
 var Upyun = require('upyun');
 var mime = require('mime');
-var path = require('path');
 var through = require('through2');
 var fs = require('vinyl-fs');
-var gutil = require('gulp-util');
-var colors = gutil.colors;
 var Q = require('q');
-
-function upyun_cdn(upload, auth, callback) {
-
-var needUploadNum = 0; // 需要上传数量
-var alreadyUploadNum = 0; // 已上传数量
-var modifyFilesNum = 0; // 已上传，但本地修改数量
-var errorCheckNum = 0; // 错误处理数量
-
+var util = require('./util');
 var highWaterMark = 2 * 1024 * 1024 * 1024; // 2G
-var logCheckDefer = Q.defer();
-var uploadDefer = Q.defer();
-var logUploadFailDefer = Q.defer();
 var upyunErrorMsgMap = {
     '40000006': '上传前后MD5值不一样，上传不完整！',
     '40100006': '用户不存在！'
 };
 
-var upyun = new Upyun(auth.bucket, auth.operator, auth.password, 'v1');
-var errors = [];
+module.exports = function(upload, auth, callback) {
+    var  context = {
+        needUploadNum: 0, // 需要上传数量
+        alreadyUploadNum: 0, // 已上传数量
+        modifyFilesNum: 0, // 已上传，但本地修改数量
+        errorCheckNum: 0, // 错误处理数量
+
+        logCheckDefer: Q.defer(),
+        uploadDefer: Q.defer(),
+        logUploadFailDefer: Q.defer(),
+
+        upyun: new Upyun(auth.bucket, auth.operator, auth.password, 'v1'),
+
+        errors: []
+    };
+
+    return fs.src(upload.src, {read: false})
+        .pipe(init(upload)) // 初始化属性值
+
+        .pipe(checkRemoteFile(context)) // 是否存在文件
+        .pipe(checkRemoteFile(context)) // retry
+        .pipe(checkRemoteFile(context)) // retry
+        .on('end', function() {
+            console.log();
+            context.logCheckDefer.resolve();
+        })
+        .pipe(logCheckFailed(context))
+        .on('end', function() {
+            context.uploadDefer.resolve();
+        })
+
+        .pipe(uploadFile(context)) // 上传文件
+        .pipe(uploadFile(context)) // retry
+        .pipe(uploadFile(context)) // retry
+        .on('end', function() {
+            context.logUploadFailDefer.resolve();
+        })
+        .pipe(logUploadFail(context))
+        .on('end', function() {
+            callback(context.errors.join(','), context);
+        })
+        // the end;
+        .pipe(through.obj());
+};
 
 function init(upload) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
@@ -41,12 +70,12 @@ function init(upload) {
     });
 }
 
-function checkRemoteFile() {
+function checkRemoteFile(context) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needCheck) {
-            upyun.existsFile(file.cdnPath, function(error, result) {
+            context.upyun.existsFile(file.cdnPath, function(error, result) {
                 if (error) {
-                    errorCheckNum++;
+                    context.errorCheckNum++;
 
                     file.needCheck = true;
                     file.checkFailMsg = '网络出错！';
@@ -57,18 +86,18 @@ function checkRemoteFile() {
                     if (status === 200) {
                         // 如果本地大小与服务器上的大小不一样，则认为本地修改了文件
                         if (file.stat.size == result.data.size) {
-                            alreadyUploadNum++;
+                            context.alreadyUploadNum++;
                         } else {
-                            modifyFilesNum++;
+                            context.modifyFilesNum++;
                         }
                         file.needCheck = false;
                     } else if (status === 404) {
-                        needUploadNum++;
+                        context.needUploadNum++;
 
                         file.needCheck = false;
                         file.needUpload = true;
                     } else {
-                        errorCheckNum++;
+                        context.errorCheckNum++;
 
                         file.needCheck = true;
                         file.checkTryCount++;
@@ -79,11 +108,11 @@ function checkRemoteFile() {
 
                 // 重试错误计算
                 if (file.checkTryCount > 1) {
-                    errorCheckNum--;
+                    context.errorCheckNum--;
                 }
 
                 next(null, file);
-                util.logCheck(alreadyUploadNum + modifyFilesNum, needUploadNum, errorCheckNum);
+                util.logCheck(context.alreadyUploadNum + context.modifyFilesNum, context.needUploadNum, context.errorCheckNum);
             });
         } else {
             next(null, file);
@@ -91,19 +120,22 @@ function checkRemoteFile() {
     });
 }
 
-function logCheckFailed() {
+function logCheckFailed(context) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needCheck) {
-            util.logCheckFail(file);
+            context.logCheckDefer.promise.then(function() {
+                util.logCheckFail(file);
+                context.errors.push(file.checkFailRes);
+            });
         }
         next(null, file);
     });
 }
 
-function uploadFile() {
+function uploadFile(context) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needUpload) {
-            upyun.uploadFile(file.cdnPath,
+            context.upyun.uploadFile(file.cdnPath,
                              file.path,
                              mime.lookup(file.path),
                              true,  // important，检查上前后md5值是否一样
@@ -118,6 +150,10 @@ function uploadFile() {
                     if (status === 200) {
                         file.uploadSuccess = true;
                         file.needUpload = false;
+
+                        context.uploadDefer.promise.then(function() {
+                            util.logUploadSuccess(file);
+                        });
                     } else {
                         var upyunErrorCode = result.headers['x-error-code'];
 
@@ -128,7 +164,6 @@ function uploadFile() {
                 }
 
                 next(null, file);
-                util.logUpload(file);
             });
         } else {
             next(null, file);
@@ -136,90 +171,14 @@ function uploadFile() {
     });
 }
 
-function logUploadFail() {
+function logUploadFail(context) {
     return through.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needUpload) {
-            util.logUploadFail(file);
+            context.logUploadFailDefer.promise.then(function() {
+                util.logUploadFail(file);
+                context.errors.push(file.uploadFailRes);
+            });
         }
         next(null, file);
     });
 }
-
-var util = {
-    getCdnPath: function(file, upload) {
-        var cdnpath = path.relative(file.base, file.path);
-        cdnpath = path.join('/', upload.dest, cdnpath);
-        return cdnpath;
-    },
-
-    logCheck: function(alreadyUploadNum, needUploadNum, errorCheckNum) {
-        process.stdout.clearLine();
-        process.stdout.cursorTo(0);
-        process.stdout.write('相同: ' + alreadyUploadNum + '\t\t' +
-                             '需要上传: ' + needUploadNum + '\t\t' +
-                             '错误:' + errorCheckNum);
-    },
-
-    logCheckFail: function(file) {
-        logCheckDefer.promise.then(function() {
-            gutil.log(colors.red('检查对比'),
-                      colors.red(file.path), '→', colors.red(file.cdnPath), '\n',
-                      colors.red('失败原因：'), colors.red(file.checkFailMsg), '\n',
-                      colors.red('返回信息：'), colors.red(file.checkFailRes));
-            errors.push(file.checkFailRes);
-        });
-    },
-
-    logUpload: function(file) {
-        uploadDefer.promise.then(function() {
-            if (file.uploadSuccess) {
-                gutil.log('上传又拍完毕', colors.green(file.path), '→', colors.green(file.cdnPath));
-            } else {
-                // gutil.log(colors.red('上传失败'), colors.red(file.path), '→', colors.red(file.cdnPath));
-                // gutil.log(colors.red('失败原因：'), colors.red(file.uploadFailMsg),
-                //           colors.red('返回信息：'), colors.red(file.uploadFailRes));
-            }
-        });
-    },
-
-    logUploadFail: function(file) {
-        logUploadFailDefer.promise.then(function() {
-            gutil.log(colors.red('上传又拍失败'),
-                      colors.red(file.path), '→', colors.red(file.cdnPath), '\n',
-                      colors.red('失败原因：'), colors.red(file.uploadFailMsg), '\n',
-                      colors.red('返回信息：'), colors.red(file.uploadFailRes));
-            errors.push(file.checkFailRes);
-        });
-    }
-};
-
-return fs.src(upload.src, {read: false})
-    .pipe(init(upload)) // 初始化属性值
-
-    .pipe(checkRemoteFile()) // 是否存在文件
-    .pipe(checkRemoteFile()) // retry
-    .pipe(checkRemoteFile()) // retry
-    .on('end', function() {
-        console.log();
-        logCheckDefer.resolve();
-    })
-    .pipe(logCheckFailed())
-    .on('end', function() {
-        uploadDefer.resolve();
-    })
-
-    .pipe(uploadFile()) // 上传文件
-    .pipe(uploadFile()) // retry
-    .pipe(uploadFile()) // retry
-    .on('end', function() {
-        logUploadFailDefer.resolve();
-    })
-    .pipe(logUploadFail())
-    .on('end', function() {
-        if (errors.length) {
-            callback(errors.join(','));
-        }
-    });
-}
-
-module.exports = upyun_cdn;
