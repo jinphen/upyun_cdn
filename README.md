@@ -14,7 +14,7 @@ auth:
 * `operator`
 * `password`
 
-callback:
+callback: [可选]
 * error
 * result
 

@@ -49,7 +49,7 @@ module.exports = function(upload, auth, callback) {
         })
         .pipe(logUploadFail(context))
         .on('end', function() {
-            callback(context.errors.join(','), context);
+            callback && callback(context.errors.join(','), context);
         })
         // the end;
         .pipe(through.obj());
