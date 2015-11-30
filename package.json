@@ -1,6 +1,6 @@
 {
   "name": "upyun_cdn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "upyun cdn upload",
   "main": "index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "q": "^1.4.1",
     "should": "^7.1.1",
     "through2": "^2.0.0",
+    "through2-concurrent": "^1.1.0",
     "upyun": "^1.1.3",
     "vinyl-fs": "^2.2.1"
   }
