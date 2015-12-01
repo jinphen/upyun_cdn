@@ -74,14 +74,20 @@ function init(upload) {
 function checkRemoteFile(context) {
     return through2Concurrent.obj({highWaterMark: highWaterMark}, function(file, encoding, next) {
         if (file.needCheck) {
+            var handleError = function(msg, res) {
+                file.needCheck = true;
+                file.checkTryCount++;
+                file.checkFailMsg = msg;
+                file.checkFailRes = res;
+
+                if (file.checkTryCount > 0) {
+                    context.errorCheckNum++;
+                }
+            }
+
             context.upyun.existsFile(file.cdnPath, function(error, result) {
                 if (error) {
-                    context.errorCheckNum++;
-
-                    file.needCheck = true;
-                    file.checkFailMsg = '网络出错！';
-                    file.checkFailRes = JSON.stringify(error);
-                    file.checkTryCount++;
+                    handleError('网络出错！', JSON.stringify(error));
                 } else {
                     var status = +result.statusCode;
                     if (status === 200) {
@@ -92,24 +98,22 @@ function checkRemoteFile(context) {
                             context.modifyFilesNum++;
                         }
                         file.needCheck = false;
+
+                        if (file.checkTryCount > 0) {
+                            context.errorCheckNum--;
+                        }
                     } else if (status === 404) {
                         context.needUploadNum++;
 
                         file.needCheck = false;
                         file.needUpload = true;
+
+                        if (file.checkTryCount > 0) {
+                            context.errorCheckNum--;
+                        }
                     } else {
-                        context.errorCheckNum++;
-
-                        file.needCheck = true;
-                        file.checkTryCount++;
-                        file.checkFailRes = JSON.stringify(result);
-                        file.checkFailMsg = upyunErrorMsgMap[result.headers['x-error-code']];
+                        handleError(upyunErrorMsgMap[result.headers['x-error-code']], JSON.stringify(result))
                     }
-                }
-
-                // 重试错误计算
-                if (file.checkTryCount > 1) {
-                    context.errorCheckNum--;
                 }
 
                 next(null, file);
