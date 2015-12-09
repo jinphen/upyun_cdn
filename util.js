@@ -10,11 +10,13 @@ module.exports = {
     },
 
     logCheck: function(alreadyUploadNum, needUploadNum, errorCheckNum) {
-        process.stdout.clearLine();
-        process.stdout.cursorTo(0);
-        process.stdout.write('相同: ' + alreadyUploadNum + '\t\t' +
-                             '需要上传: ' + needUploadNum + '\t\t' +
-                             '错误:' + errorCheckNum);
+        if (process.stdin.isTTY) {
+            process.stdout.clearLine();
+            process.stdout.cursorTo(0);
+            process.stdout.write('相同: ' + alreadyUploadNum + '\t\t' +
+                                 '需要上传: ' + needUploadNum + '\t\t' +
+                                 '错误:' + errorCheckNum);
+        }
     },
 
     logCheckFail: function(file) {
