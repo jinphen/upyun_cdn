@@ -10,7 +10,7 @@ module.exports = {
     },
 
     logCheck: function(alreadyUploadNum, needUploadNum, errorCheckNum) {
-        if (process.stdin.isTTY) {
+        if (process.stdout.isTTY) {
             process.stdout.clearLine();
             process.stdout.cursorTo(0);
             process.stdout.write('相同: ' + alreadyUploadNum + '\t\t' +
