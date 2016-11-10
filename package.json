@@ -1,6 +1,6 @@
 {
   "name": "upyun_cdn",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "upyun cdn upload",
   "main": "index.js",
   "scripts": {
